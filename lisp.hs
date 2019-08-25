@@ -183,6 +183,8 @@ apply table ((Atom funName) :. args)  = do
   fun table args
 apply _ _ = Left "Wrong arguments given to apply"
 
+-- quoting atoms doesn't halt
+-- e.g. (quote 1)
 quote _ (elm :. Nil) = Right elm
 quote _ _ = Left "Function quote not applied to single argument"
 
