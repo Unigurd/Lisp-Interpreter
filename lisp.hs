@@ -12,10 +12,33 @@ data LispVal =
     Atom String
   | LispVal :. LispVal
   | Nil
+  | Function (Table -> LispVal -> LispVal)
   | Int Int
   | T
   | String String
-  deriving (Show, Eq)
+--deriving (Show, Eq)
+
+instance Show LispVal where
+  show (car :. cdr) = "(" ++ (showHelp (car :. cdr)) ++ ")"
+  show other = show other
+
+showHelp (Atom string) =
+  string
+showHelp ((caar :. cadr) :. cdr) =
+  "(" ++ (showHelp (caar :. cadr)) ++ ") " ++ (showHelp cdr)
+showHelp (car :. (cdar :. cddr)) =
+  (showHelp car) ++ " " ++ (showHelp (cdar :. cddr))
+showHelp (car :. Nil) = 
+  showHelp car
+showHelp (car :. cdr) = 
+  (showHelp car) ++ " . " ++ (showHelp cdr)
+showHelp Nil = 
+  "()"
+showHelp (Function _) = "lambda"
+showHelp (Int int) = show int
+showHelp T = "t"
+showHelp (String string) = show string
+
 
 data Progress = Finished | Unfinished 
 newtype Table = Table [(String, Table -> LispVal -> Either String LispVal)] 
@@ -212,7 +235,7 @@ plus table rawArgs = do
         _              -> Left "Wrong type given to +"  
 
 
-primitives =
+builtins =
   [("car", car),
    ("cdr", cdr),
    ("apply", apply),
@@ -224,7 +247,7 @@ primitives =
   ]
 
 interpret :: String -> Either String LispVal
-interpret str = (build str) >>= eval (Table primitives)
+interpret str = (build str) >>= eval (Table builtins)
 
 interpretTests =
   [("", Left ""),
@@ -251,9 +274,9 @@ interpretTests =
   ]
 
 
-test f t = map (\x -> f (fst x) == snd x) t
-
-testInterpret = test interpret interpretTests
+-- test f t = map (\x -> f (fst x) == snd x) t
+-- 
+-- testInterpret = test interpret interpretTests
 
 {- 
 lambda
