@@ -20,7 +20,7 @@ data LispVal =
 
 instance Show LispVal where
   show (car :. cdr) = "(" ++ (showHelp (car :. cdr)) ++ ")"
-  show other = show other
+  show other = showHelp other
 
 showHelp (Atom string) =
   string
