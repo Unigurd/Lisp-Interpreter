@@ -12,10 +12,11 @@ data LispVal =
     Atom String
   | LispVal :. LispVal
   | Nil
---  | Function (Table -> LispVal -> LispVal)
   | Int Int
   | T
   | String String
+--  | PrimitiveFunc (Table -> LispVal -> LispError)
+--  | Lambda Table
   deriving (Eq)
 
 instance Show LispVal where
@@ -236,6 +237,32 @@ plus table rawArgs = do
         (acc, Nil)     -> Right acc
         _              -> Left "Wrong type given to +"  
 
+raise table (rawArg :. Nil) = do
+  arg <- eval table rawArg
+  Left $ show arg
+raise _ _ =
+  Left "Wrong arguments given to raise"
+
+catch table (try :. (except :. Nil)) =
+  case eval table try of
+    Left err -> eval table (except :. ((String err) :. Nil))
+    Right result -> Right result
+catch _ _ =
+  Left "Wrong arguments given to catch"
+
+append table rawArgs = do
+  args <- lMapM (eval table) rawArgs
+  lFoldM lAppend (String "") args
+  where
+    lAppend acc elm =
+      case (acc, elm) of
+        (String a, String b) -> Right (String (a ++ b))
+        (acc, Nil)           -> Right (acc) 
+        (_, _)               -> Left "Wrong type given to append"  
+
+temp table ((String str) :. Nil) =
+  Right (String ("temp to test catch: " ++ str))
+temp _ _ = Left "Wrong arguments given to temp"
 
 builtins =
   [("car", car),
@@ -245,7 +272,11 @@ builtins =
    ("atom", atom),
    ("cons", cons),
    ("if", lIf),
-   ("+", plus)
+   ("+", plus),
+   ("raise", raise),
+   ("catch", catch),
+   ("append", append),
+   ("temp", temp)
   ]
 
 interpret :: String -> LispError
