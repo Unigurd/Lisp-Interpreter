@@ -12,11 +12,11 @@ data LispVal =
     Atom String
   | LispVal :. LispVal
   | Nil
-  | Function (Table -> LispVal -> LispVal)
+--  | Function (Table -> LispVal -> LispVal)
   | Int Int
   | T
   | String String
---deriving (Show, Eq)
+  deriving (Eq)
 
 instance Show LispVal where
   show (car :. cdr) = "(" ++ (showHelp (car :. cdr)) ++ ")"
@@ -34,14 +34,15 @@ showHelp (car :. cdr) =
   (showHelp car) ++ " . " ++ (showHelp cdr)
 showHelp Nil = 
   "()"
-showHelp (Function _) = "lambda"
+--showHelp (Function _) = "lambda"
 showHelp (Int int) = show int
 showHelp T = "t"
 showHelp (String string) = show string
 
+type LispError = Either String LispVal
 
 data Progress = Finished | Unfinished 
-newtype Table = Table [(String, Table -> LispVal -> Either String LispVal)] 
+newtype Table = Table [(String, Table -> LispVal -> LispError)] 
 
 lFold :: (a -> LispVal -> a) -> a -> LispVal -> a
 lFold fun acc (car :. cdr) = lFold fun (fun acc car) cdr 
@@ -159,7 +160,7 @@ parseHelp (Word word:tokens) = do
 parseHelp [] =
   Left "Unexpected end of expression"
 
-parse :: [Token] -> Either String LispVal
+parse :: [Token] -> LispError
 parse (Open:tokens) = do
   (lispVal, progress, _) <- parseHelp $ (Open:tokens)
   case progress of
@@ -170,14 +171,14 @@ parse _ = Left "Missing opening bracket"
 
 build = parse . lexx
 
-lookUp :: Table -> String -> Either String (Table -> LispVal -> Either String LispVal) 
+lookUp :: Table -> String -> Either String (Table -> LispVal -> LispError) 
 lookUp (Table ((x,y):xys)) key = 
   case x == key of
     True  -> Right y
     False -> lookUp (Table xys) key
 lookUp (Table []) key = Left $ "Unknown symbol" ++ (show key)
 
-apply :: Table -> LispVal -> Either String LispVal
+apply :: Table -> LispVal -> LispError
 apply table ((Atom funName) :. args)  = do
   fun <- lookUp table funName
   fun table args
@@ -186,7 +187,7 @@ apply _ _ = Left "Wrong arguments given to apply"
 quote _ (elm :. Nil) = Right elm
 quote _ _ = Left "Function quote not applied to single argument"
 
-eval :: Table -> LispVal -> Either String LispVal
+eval :: Table -> LispVal -> LispError
 eval table list@((Atom fun) :. args) = apply table list
 eval _ (notFun :. _) = Left ((show notFun) ++ " is not a function")
 eval _ other = return other
@@ -224,6 +225,7 @@ lIf table (pred :. (trueExp :. (falseExp :. Nil))) = do
     _   -> eval table trueExp
 lIf _ _ = Left "Wrong number of arguments given to if"
 
+
 plus table rawArgs = do
   args <- lMapM (eval table) rawArgs
   lFoldM lPlus (Int 0) args
@@ -246,7 +248,7 @@ builtins =
    ("+", plus)
   ]
 
-interpret :: String -> Either String LispVal
+interpret :: String -> LispError
 interpret str = (build str) >>= eval (Table builtins)
 
 interpretTests =
@@ -274,9 +276,9 @@ interpretTests =
   ]
 
 
--- test f t = map (\x -> f (fst x) == snd x) t
--- 
--- testInterpret = test interpret interpretTests
+test f t = map (\x -> f (fst x) == snd x) t
+
+testInterpret = test interpret interpretTests
 
 {- 
 lambda
