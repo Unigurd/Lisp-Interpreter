@@ -222,7 +222,7 @@ lIf table (pred :. (trueExp :. (falseExp :. Nil))) = do
   case result of
     Nil -> eval table falseExp
     _   -> eval table trueExp
-
+lIf _ _ = Left "Wrong number of arguments given to if"
 
 plus table rawArgs = do
   args <- lMapM (eval table) rawArgs
