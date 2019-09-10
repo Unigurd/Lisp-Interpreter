@@ -15,9 +15,9 @@ data LispVal =
   | Int Int
   | T
   | String String
---  | PrimitiveFunc (Table -> LispVal -> LispError)
+  | PrimFun ((Table -> LispVal -> LispError), String)
 --  | Lambda Table
-  deriving (Eq)
+  --deriving (Eq)
 
 instance Show LispVal where
   show (car :. cdr) = "(" ++ (showHelp (car :. cdr)) ++ ")"
@@ -40,10 +40,11 @@ showHelp (Int int) = show int
 showHelp T = "t"
 showHelp (String string) = show string
 
+
 type LispError = Either String LispVal
 
 data Progress = Finished | Unfinished 
-newtype Table = Table [(String, Table -> LispVal -> LispError)] 
+newtype Table = Table [(String, LispVal)] 
 
 lFold :: (a -> LispVal -> a) -> a -> LispVal -> a
 lFold fun acc (car :. cdr) = lFold fun (fun acc car) cdr 
@@ -172,7 +173,9 @@ parse _ = Left "Missing opening bracket"
 
 build = parse . lexx
 
-lookUp :: Table -> String -> Either String (Table -> LispVal -> LispError) 
+wrongArgs str = Left ("Wrong arguments given to " ++ str)
+
+lookUp :: Table -> String -> LispError
 lookUp (Table ((x,y):xys)) key = 
   case x == key of
     True  -> Right y
@@ -180,18 +183,20 @@ lookUp (Table ((x,y):xys)) key =
 lookUp (Table []) key = Left $ "Unknown symbol" ++ (show key)
 
 apply :: Table -> LispVal -> LispError
-apply table ((Atom funName) :. args)  = do
-  fun <- lookUp table funName
-  fun table args
-apply _ _ = Left "Wrong arguments given to apply"
+apply table (car :. args) = do
+  case eval table car of
+    Right (PrimFun (fun, _)) -> fun table args
+    Right _ -> wrongArgs "apply"
+    Left err -> Left err
+apply _ args = wrongArgs "apply"
+
+eval :: Table -> LispVal -> LispError
+eval table list@(_ :. _) = apply table list
+eval table (Atom a) = lookUp table a
+eval _ other = return other
 
 quote _ (elm :. Nil) = Right elm
 quote _ _ = Left "Function quote not applied to single argument"
-
-eval :: Table -> LispVal -> LispError
-eval table list@((Atom fun) :. args) = apply table list
-eval _ (notFun :. _) = Left ((show notFun) ++ " is not a function")
-eval _ other = return other
 
 car table rawArgs = do
   args <- lMapM (eval table) rawArgs 
@@ -217,14 +222,14 @@ cons table rawArgs = do
   args <- lMapM (eval table) rawArgs
   case args of
     (car :. (cdr :. Nil)) -> Right (car :. cdr)
-    _ -> Left "Wrong number of arguments given to cons"
+    _ -> wrongArgs "cons"
 
 lIf table (pred :. (trueExp :. (falseExp :. Nil))) = do
   result <- eval table pred
   case result of
     Nil -> eval table falseExp
     _   -> eval table trueExp
-lIf _ _ = Left "Wrong number of arguments given to if"
+lIf _ _ = wrongArgs "if"
 
 
 plus table rawArgs = do
@@ -241,14 +246,14 @@ raise table (rawArg :. Nil) = do
   arg <- eval table rawArg
   Left $ show arg
 raise _ _ =
-  Left "Wrong arguments given to raise"
+  wrongArgs "raise"
 
 catch table (try :. (except :. Nil)) =
   case eval table try of
     Left err -> eval table (except :. ((String err) :. Nil))
     Right result -> Right result
 catch _ _ =
-  Left "Wrong arguments given to catch"
+  wrongArgs "catch"
 
 append table rawArgs = do
   args <- lMapM (eval table) rawArgs
@@ -261,22 +266,23 @@ append table rawArgs = do
         (_, _)               -> Left "Wrong type given to append"  
 
 temp table ((String str) :. Nil) =
-  Right (String ("temp to test catch: " ++ str))
-temp _ _ = Left "Wrong arguments given to temp"
+  Right (String ("temp fun to test catch by appending: " ++ str))
+temp _ _ = wrongArgs "temp"
 
 builtins =
-  [("car", car),
-   ("cdr", cdr),
-   ("apply", apply),
-   ("quote", quote),
-   ("atom", atom),
-   ("cons", cons),
-   ("if", lIf),
-   ("+", plus),
-   ("raise", raise),
-   ("catch", catch),
-   ("append", append),
-   ("temp", temp)
+  [("car", PrimFun (car, "car")),
+   ("cdr", PrimFun (cdr, "cdr")),
+   ("apply", PrimFun (apply, "apply")),
+   ("eval", PrimFun (eval, "eval")),
+   ("quote", PrimFun (quote, "quote")),
+   ("atom", PrimFun (atom, "atom")),
+   ("cons", PrimFun (cons, "cons")),
+   ("if", PrimFun (lIf, "if")),
+   ("+", PrimFun (plus, "+")),
+   ("raise", PrimFun (raise, "raise")),
+   ("catch", PrimFun (catch, "catch")),
+   ("append", PrimFun (append, "append")),
+   ("temp", PrimFun (temp, "temp"))
   ]
 
 interpret :: String -> LispError
@@ -307,9 +313,9 @@ interpretTests =
   ]
 
 
-test f t = map (\x -> f (fst x) == snd x) t
-
-testInterpret = test interpret interpretTests
+--test f t = map (\x -> f (fst x) == snd x) t
+--
+--testInterpret = test interpret interpretTests
 
 {- 
 lambda
