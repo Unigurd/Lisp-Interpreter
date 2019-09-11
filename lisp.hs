@@ -16,8 +16,18 @@ data LispVal =
   | T
   | String String
   | PrimFun ((Table -> LispVal -> LispError), String)
---  | Lambda Table
+  | Lambda Table
   --deriving (Eq)
+
+instance Eq LispVal where
+  (==) (Atom str1) (Atom str2) = str1 == str2
+  (==) (car1 :. cdr1) (car2 :. cdr2) = car1 == car2 && cdr1 == cdr2
+  (==) Nil Nil = True
+  (==) (Int int1) (Int int2) = int1 == int2
+  (==) T T = True
+  (==) (String str1) (String str2) = str1 == str2
+  (==) (PrimFun (_, funName1)) (PrimFun (_, funName2)) = funName1 == funName2
+  (==) (Lambda table1) (Lambda table2) = table1 == table2
 
 instance Show LispVal where
   show (car :. cdr) = "(" ++ (showHelp (car :. cdr)) ++ ")"
@@ -39,12 +49,13 @@ showHelp Nil =
 showHelp (Int int) = show int
 showHelp T = "t"
 showHelp (String string) = show string
-
+showHelp (PrimFun (_, name)) = name
 
 type LispError = Either String LispVal
 
 data Progress = Finished | Unfinished 
 newtype Table = Table [(String, LispVal)] 
+  deriving (Eq)
 
 lFold :: (a -> LispVal -> a) -> a -> LispVal -> a
 lFold fun acc (car :. cdr) = lFold fun (fun acc car) cdr 
@@ -313,9 +324,9 @@ interpretTests =
   ]
 
 
---test f t = map (\x -> f (fst x) == snd x) t
---
---testInterpret = test interpret interpretTests
+test f t = map (\x -> f (fst x) == snd x) t
+
+testInterpret = test interpret interpretTests
 
 {- 
 lambda
