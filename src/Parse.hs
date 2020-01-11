@@ -70,7 +70,7 @@ toAtom str =
   let tried = (return str) >>= 
               (readEitherFlip Int) >>=
               (readEitherFlip String) >>=
-              (\x -> if x == "lambda" then Left (Lambda (Table [])) else Right x) >>=
+              (\x -> if x == "lambda" then Left (Lambda (Table Nil)) else Right x) >>=
               (\x -> if x == "t" then Left T else Right x) in
   case tried of
     Left result -> result

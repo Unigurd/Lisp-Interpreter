@@ -78,18 +78,35 @@ temp table ((String str) :. Nil) =
 temp _ _ = wrongArgs "temp"
 
 builtins =
-  [("car", PrimFun (car, "car")),
-   ("cdr", PrimFun (cdr, "cdr")),
-   ("apply", PrimFun (apply, "apply")),
-   ("eval", PrimFun (eval, "eval")),
-   ("quote", PrimFun (quote, "quote")),
-   ("atom", PrimFun (atom, "atom")),
-   ("cons", PrimFun (cons, "cons")),
-   ("if", PrimFun (lIf, "if")),
-   ("+", PrimFun (plus, "+")),
-   ("throw", PrimFun (throw, "throw")),
-   ("catch", PrimFun (catch, "catch")),
-   ("append", PrimFun (append, "append")),
-   ("temp", PrimFun (temp, "temp"))
-  ]
+  ((Atom "car"    :. PrimFun (car,    "car")) :.
+   (Atom "cdr"    :. PrimFun (cdr,    "cdr")) :.
+   (Atom "apply"  :. PrimFun (apply,  "apply")) :.
+   (Atom "eval"   :. PrimFun (eval,   "eval")) :.
+   (Atom "quote"  :. PrimFun (quote,  "quote")) :.
+   (Atom "atom"   :. PrimFun (atom,   "atom")) :.
+   (Atom "cons"   :. PrimFun (cons,   "cons")) :.
+   (Atom "if"     :. PrimFun (lIf,    "if")) :.
+   (Atom "+"      :. PrimFun (plus,   "+")) :.
+   (Atom "throw"  :. PrimFun (throw,  "throw")) :.
+   (Atom "catch"  :. PrimFun (catch,  "catch")) :.
+   (Atom "append" :. PrimFun (append, "append")) :.
+   (Atom "temp"   :. PrimFun (temp,   "temp")) :.
+   Nil)
+  
+
+--builtins =
+--  [("car", PrimFun (car, "car")),
+--   ("cdr", PrimFun (cdr, "cdr")),
+--   ("apply", PrimFun (apply, "apply")),
+--   ("eval", PrimFun (eval, "eval")),
+--   ("quote", PrimFun (quote, "quote")),
+--   ("atom", PrimFun (atom, "atom")),
+--   ("cons", PrimFun (cons, "cons")),
+--   ("if", PrimFun (lIf, "if")),
+--   ("+", PrimFun (plus, "+")),
+--   ("throw", PrimFun (throw, "throw")),
+--   ("catch", PrimFun (catch, "catch")),
+--   ("append", PrimFun (append, "append")),
+--   ("temp", PrimFun (temp, "temp"))
+--  ]
 

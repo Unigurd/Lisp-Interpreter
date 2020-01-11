@@ -11,6 +11,11 @@ data LispVal =
   | Lambda Table
   --deriving (Eq)
 
+infixr 5 :.
+
+newtype Table = Table LispVal
+  deriving (Eq)
+
 instance Eq LispVal where
   (==) (Atom str1) (Atom str2) = str1 == str2
   (==) (car1 :. cdr1) (car2 :. cdr2) = car1 == car2 && cdr1 == cdr2
@@ -48,8 +53,6 @@ instance Show LispVal where
 
 type LispError = Either String LispVal
 
-newtype Table = Table [(String, LispVal)] 
-  deriving (Eq)
 
 -- foldl for LispVals
 lFold :: (a -> LispVal -> a) -> a -> LispVal -> a
@@ -95,16 +98,18 @@ lMapM fun other = fun other
 wrongArgs str = Left ("Wrong arguments given to " ++ str)
 
 lookUp :: Table -> LispVal -> LispError
-lookUp (Table ((x,y):xys)) (Atom key) = 
+lookUp (Table ((Atom x:.y):.xys)) (Atom key) = 
   case x == key of
     True  -> Right y
     False -> lookUp (Table xys) (Atom key)
-lookUp (Table []) (String key) = Left $ "Unknown symbol" ++ (show key)
+-- If an element in the table is identified by something other than an Atom, we just skip right past
+lookUp (Table ((_:._):.xys)) (Atom key) = lookUp (Table xys) (Atom key)
+lookUp (Table Nil) (String key) = Left $ "Unknown symbol" ++ (show key)
 lookUp _ _ = wrongArgs "lookup"
 
 define :: Table -> String -> LispVal -> Either String Table
 define (Table table) name value =
-  Right (Table ((name, value):table))
+  Right (Table ((Atom name:.value):.table))
 
 tmpBind :: Table -> LispVal -> LispVal -> Either String Table
 tmpBind table Nil Nil = return table -- equally many parameters and arguments
