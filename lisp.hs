@@ -28,28 +28,31 @@ instance Eq LispVal where
   (==) (String str1) (String str2) = str1 == str2
   (==) (PrimFun (_, funName1)) (PrimFun (_, funName2)) = funName1 == funName2
   (==) (Lambda table1) (Lambda table2) = table1 == table2
+  (==) _ _ = False
 
 instance Show LispVal where
-  show (car :. cdr) = "(" ++ (showHelp (car :. cdr)) ++ ")"
-  show other = showHelp other
-
-showHelp (Atom string) =
-  string
-showHelp ((caar :. cadr) :. cdr) =
-  "(" ++ (showHelp (caar :. cadr)) ++ ") " ++ (showHelp cdr)
-showHelp (car :. (cdar :. cddr)) =
-  (showHelp car) ++ " " ++ (showHelp (cdar :. cddr))
-showHelp (car :. Nil) = 
-  showHelp car
-showHelp (car :. cdr) = 
-  (showHelp car) ++ " . " ++ (showHelp cdr)
-showHelp Nil = 
-  "()"
---showHelp (Function _) = "lambda"
-showHelp (Int int) = show int
-showHelp T = "t"
-showHelp (String string) = show string
-showHelp (PrimFun (_, name)) = name
+  show lispVal =
+    case lispVal of
+      (car :. cdr) -> "(" ++ (showHelp (car :. cdr)) ++ ")"
+      other -> showHelp other
+    where
+      showHelp (Atom string) =
+        string
+      showHelp ((caar :. cadr) :. cdr) =
+        "(" ++ (showHelp (caar :. cadr)) ++ ") " ++ (showHelp cdr)
+      showHelp (car :. (cdar :. cddr)) =
+        (showHelp car) ++ " " ++ (showHelp (cdar :. cddr))
+      showHelp (car :. Nil) = 
+        showHelp car
+      showHelp (car :. cdr) = 
+        (showHelp car) ++ " . " ++ (showHelp cdr)
+      showHelp Nil = 
+        "()"
+      showHelp (Int int) = show int
+      showHelp T = "t"
+      showHelp (String string) = show string
+      showHelp (PrimFun (_, name)) = name
+      showHelp (Lambda _) = "lambda"
 
 type LispError = Either String LispVal
 
@@ -57,20 +60,39 @@ data Progress = Finished | Unfinished
 newtype Table = Table [(String, LispVal)] 
   deriving (Eq)
 
+-- foldl for LispVals
 lFold :: (a -> LispVal -> a) -> a -> LispVal -> a
 lFold fun acc (car :. cdr) = lFold fun (fun acc car) cdr 
 lFold fun acc other = fun acc other
 
+-- Folding of two LispVals simultaneously
+-- Should maybe be lFold . lZip?
+lFold2 :: (a -> LispVal -> LispVal -> a) -> a -> LispVal -> LispVal -> Either String a
+lFold2 fun acc (car1 :. cdr1) (car2 :. cdr2) = lFold2 fun (fun acc car1 car2) cdr1 cdr2
+lFold2 _ acc Nil Nil = Right acc
+lFold2 _ _ _ _ = Left "Something went wrong in internal function \"lFold2\""
+
+-- foldlM for lispVals
 lFoldM :: Monad m => (a -> LispVal -> m a) -> a -> LispVal -> m a
 lFoldM fun acc (car :. cdr) = do
   newAcc <- fun acc car
   lFoldM fun newAcc cdr
 lFoldM fun acc other = fun acc other
 
+--lFoldM2 :: Monad m => (a -> LispVal -> LispVal -> m a) -> a -> LispVal -> LispVal -> Either String (m a)
+--lFoldM2 fun acc (car1 :. cdr1) (car2 :. cdr2) = do
+--  newAcc <- fun acc car1 car2
+--  lFoldM2 fun newAcc cdr1 cdr2
+--lFoldM2 _ acc Nil Nil = Right (return acc)
+--lFoldM2 _ _ _ _ = Left "Something went wrong in internal function \"lFoldM2\""
+
+-- map for LispVals
+-- Should perhaps be implemented in terms of lFold?
 lMap :: (LispVal -> LispVal) -> LispVal -> LispVal
 lMap fun (car :. cdr) = (fun car) :. (lMap fun cdr)
 lMap fun other = fun other
 
+-- monadic mapping for lispVals
 lMapM :: Monad m => (LispVal -> m LispVal) -> LispVal -> m LispVal
 lMapM fun (car :. cdr) = do
   carResult <- fun car
@@ -98,42 +120,46 @@ removeLeadingWhiteSpace ('\n':str) =
 removeLeadingWhiteSpace str =
   str
 
-lWordHelp :: String -> (String, String)
-lWordHelp ('(':str) =
-  ("(", str)
-lWordHelp (')':str) =
- (")", str)
-lWordHelp (' ':str) =
-  ("", str)
-lWordHelp ('\n':str) =
-  ("", str)
-lWordHelp (letter:'(':str) =
-  ([letter],'(':str)
-lWordHelp (letter:')':str) =
-  ([letter],')':str)
-lWordHelp (letter:str) =
-  let (word, rest) = lWordHelp str in
-  (letter:word, rest)
-lWordHelp [] =
-  ("","")
-
-lWord :: String -> (String, String)
-lWord = lWordHelp . removeLeadingWhiteSpace
-
+-- Like words, but treats ( and ) as separate words regardless of whitespace
 lWords :: String -> [String]
 lWords str =
   case lWord str of 
     (word, [])   -> [word]
     (word, rest) -> word:(lWords rest)
+  where
+    lWord :: String -> (String, String)
+    lWord = lWordHelp . removeLeadingWhiteSpace
+
+    lWordHelp :: String -> (String, String)
+    lWordHelp ('(':str) =
+      ("(", str)
+    lWordHelp (')':str) =
+     (")", str)
+    lWordHelp (' ':str) =
+      ("", str)
+    lWordHelp ('\n':str) =
+      ("", str)
+    lWordHelp (letter:'(':str) =
+      ([letter],'(':str)
+    lWordHelp (letter:')':str) =
+      ([letter],')':str)
+    lWordHelp (letter:str) =
+      let (word, rest) = lWordHelp str in
+      (letter:word, rest)
+    lWordHelp [] =
+      ("","")
+
 
 toToken :: String -> Token
 toToken "(" = Open
 toToken ")" = Closed
 toToken str = Word . toAtom $ str
 
+-- lexx because lex is in prelude
 lexx :: String -> [Token]
 lexx = map toToken . lWords
 
+-- Returns Left when successfully read, Right with whatever was attempted read upon failure
 readEitherFlip :: Read a => (a -> LispVal) -> String -> Either LispVal String
 readEitherFlip wrap str =
   case readMaybe str of
@@ -145,65 +171,93 @@ toAtom str =
   let tried = (return str) >>= 
               (readEitherFlip Int) >>=
               (readEitherFlip String) >>=
+              (\x -> if x == "lambda" then Left (Lambda (Table [])) else Right x) >>=
               (\x -> if x == "t" then Left T else Right x) in
   case tried of
     Left result -> result
     Right str  -> Atom str
 
-parseHelp :: [Token] -> Either String (LispVal, Progress, [Token])
-parseHelp (Open:tokens) = do
-  result1 <- parseHelp tokens
-  case result1 of
-    (innerList, _, Closed:[]) -> return (innerList, Finished, [])
-    (innerList, _, Closed:tmpTokens) -> do
-      result2 <- parseHelp tmpTokens
-      case result2 of
-        (head :. tail, _, tokens) -> Right (innerList :. (head :. tail), Unfinished, tokens)
-        (Nil, _, tokens) -> Right (innerList :. Nil, Unfinished, tokens)
-        _   -> Left "Something went wrong"
-    _ -> Left "Unmatched opening bracket"
-
-parseHelp (Closed:tokens) =
-  Right (Nil, Unfinished, Closed:tokens)
-
-parseHelp (Word word:tokens) = do
-  (lispVal, _, rest) <- parseHelp tokens
-  Right (word :. lispVal, Unfinished, rest)
-
-parseHelp [] =
-  Left "Unexpected end of expression"
-
 parse :: [Token] -> LispError
-parse (Open:tokens) = do
-  (lispVal, progress, _) <- parseHelp $ (Open:tokens)
-  case progress of
-    Unfinished -> Left "Missing opening bracket"
-    Finished   -> Right lispVal
-parse [Word (Atom "")] = Left ""
-parse _ = Left "Missing opening bracket"
+parse tokens =
+  case tokens of
+    (Open:tokens) -> do
+      (lispVal, progress, _) <- parseHelp $ (Open:tokens)
+      case progress of
+        Unfinished -> Left "Missing opening bracket"
+        Finished   -> Right lispVal
+    [Word (Atom "")] -> Left ""
+    _  -> Left "Missing opening bracket"
+
+  where
+    parseHelp :: [Token] -> Either String (LispVal, Progress, [Token])
+    parseHelp (Open:tokens) = do
+      result1 <- parseHelp tokens
+      case result1 of
+        (innerList, _, Closed:[]) -> return (innerList, Finished, [])
+        (innerList, _, Closed:tmpTokens) -> do
+          result2 <- parseHelp tmpTokens
+          case result2 of
+            (head :. tail, _, tokens) -> Right (innerList :. (head :. tail), Unfinished, tokens)
+            (Nil, _, tokens) -> Right (innerList :. Nil, Unfinished, tokens)
+            _   -> Left "Something went wrong"
+        _ -> Left "Unmatched opening bracket"
+    
+    parseHelp (Closed:tokens) =
+      Right (Nil, Unfinished, Closed:tokens)
+    
+    parseHelp (Word word:tokens) = do
+      (lispVal, _, rest) <- parseHelp tokens
+      Right (word :. lispVal, Unfinished, rest)
+    
+    parseHelp [] =
+      Left "Unexpected end of expression"
 
 build = parse . lexx
 
 wrongArgs str = Left ("Wrong arguments given to " ++ str)
 
-lookUp :: Table -> String -> LispError
-lookUp (Table ((x,y):xys)) key = 
+lookUp :: Table -> LispVal -> LispError
+lookUp (Table ((x,y):xys)) (Atom key) = 
   case x == key of
     True  -> Right y
-    False -> lookUp (Table xys) key
-lookUp (Table []) key = Left $ "Unknown symbol" ++ (show key)
+    False -> lookUp (Table xys) (Atom key)
+lookUp (Table []) (String key) = Left $ "Unknown symbol" ++ (show key)
+lookUp _ _ = wrongArgs "lookup"
+
+define :: Table -> String -> LispVal -> Either String Table
+define (Table table) name value =
+  Right (Table ((name, value):table))
+
+tmpBind :: Table -> LispVal -> LispVal -> Either String Table
+tmpBind table Nil Nil = return table -- equally many parameters and arguments
+tmpBind table (Atom name :. Nil) rest@(_ :. (_ :. _)) = do 
+  -- bind the list of the remaining arguments to the last parameter
+  newTable <- define table name rest
+  return newTable
+tmpBind table (Atom name :. cdr1) (value :. cdr2) = do
+  -- bind an argument value to a param name
+  newTable <- define table name value
+  tmpBind newTable cdr1 cdr2
+tmpBind _ (_ :. _) Nil =
+  -- Error if too few arguments are supplied. Might implement currying sometime
+  Left "Not enough arguments supplied"
 
 apply :: Table -> LispVal -> LispError
-apply table (car :. args) = do
-  case eval table car of
-    Right (PrimFun (fun, _)) -> fun table args
-    Right _ -> wrongArgs "apply"
-    Left err -> Left err
+apply table (car :. cdr) = do
+  head <- eval table car
+  case head of
+    (PrimFun (fun, _)) -> fun table cdr
+    lambda@(Lambda _)  -> return lambda
+    (((Lambda closure) :. (params :. body)) :. args) -> do
+      newTable <- tmpBind closure params args
+      lMapM (eval newTable) body
+    _ -> wrongArgs "apply"
 apply _ args = wrongArgs "apply"
 
 eval :: Table -> LispVal -> LispError
+eval table atom@(Atom _) = lookUp table atom
 eval table list@(_ :. _) = apply table list
-eval table (Atom a) = lookUp table a
+eval closure (Lambda _)  = Right (Lambda closure)
 eval _ other = return other
 
 quote _ (elm :. Nil) = Right elm
@@ -253,11 +307,11 @@ plus table rawArgs = do
         (acc, Nil)     -> Right acc
         _              -> Left "Wrong type given to +"  
 
-raise table (rawArg :. Nil) = do
+throw table (rawArg :. Nil) = do
   arg <- eval table rawArg
   Left $ show arg
 raise _ _ =
-  wrongArgs "raise"
+  wrongArgs "throw"
 
 catch table (try :. (except :. Nil)) =
   case eval table try of
@@ -290,7 +344,7 @@ builtins =
    ("cons", PrimFun (cons, "cons")),
    ("if", PrimFun (lIf, "if")),
    ("+", PrimFun (plus, "+")),
-   ("raise", PrimFun (raise, "raise")),
+   ("throw", PrimFun (throw, "throw")),
    ("catch", PrimFun (catch, "catch")),
    ("append", PrimFun (append, "append")),
    ("temp", PrimFun (temp, "temp"))
@@ -298,6 +352,7 @@ builtins =
 
 interpret :: String -> LispError
 interpret str = (build str) >>= eval (Table builtins)
+i exp = interpret ("(" ++ exp ++ ")") -- shorthand
 
 interpretTests =
   [("", Left ""),
