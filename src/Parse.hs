@@ -1,7 +1,7 @@
 module Parse where
 
-import Text.Read hiding (String, Symbol)
-import LispVal
+import Text.Read (readMaybe)
+import LispVal (LispError, LispVal(..), Table(Table))
 
 data Token = 
     Open 

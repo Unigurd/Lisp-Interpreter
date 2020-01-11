@@ -91,3 +91,50 @@ lMapM fun (car :. cdr) = do
   return (carResult :. cdrResult)
 lMapM fun other = fun other
 
+
+wrongArgs str = Left ("Wrong arguments given to " ++ str)
+
+lookUp :: Table -> LispVal -> LispError
+lookUp (Table ((x,y):xys)) (Atom key) = 
+  case x == key of
+    True  -> Right y
+    False -> lookUp (Table xys) (Atom key)
+lookUp (Table []) (String key) = Left $ "Unknown symbol" ++ (show key)
+lookUp _ _ = wrongArgs "lookup"
+
+define :: Table -> String -> LispVal -> Either String Table
+define (Table table) name value =
+  Right (Table ((name, value):table))
+
+tmpBind :: Table -> LispVal -> LispVal -> Either String Table
+tmpBind table Nil Nil = return table -- equally many parameters and arguments
+tmpBind table (Atom name :. Nil) rest@(_ :. (_ :. _)) = do 
+  -- bind the list of the remaining arguments to the last parameter
+  newTable <- define table name rest
+  return newTable
+tmpBind table (Atom name :. cdr1) (value :. cdr2) = do
+  -- bind an argument value to a param name
+  newTable <- define table name value
+  tmpBind newTable cdr1 cdr2
+tmpBind _ (_ :. _) Nil =
+  -- Error if too few arguments are supplied. Might implement currying sometime
+  Left "Not enough arguments supplied"
+
+apply :: Table -> LispVal -> LispError
+apply table (car :. cdr) = do
+  head <- eval table car
+  case head of
+    (PrimFun (fun, _)) -> fun table cdr
+    lambda@(Lambda _)  -> return lambda
+    (((Lambda closure) :. (params :. body)) :. args) -> do
+      newTable <- tmpBind closure params args
+      lMapM (eval newTable) body
+    _ -> wrongArgs "apply"
+apply _ args = wrongArgs "apply"
+
+eval :: Table -> LispVal -> LispError
+eval table atom@(Atom _) = lookUp table atom
+eval table list@(_ :. _) = apply table list
+eval closure (Lambda _)  = Right (Lambda closure)
+eval _ other = return other
+
