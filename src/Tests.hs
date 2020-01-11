@@ -2,9 +2,13 @@ module Tests where
 
 import Interpret (interpret)
 import LispVal (LispVal(..))
+import Text.Printf (printf)
 
 test f t = map (\x -> f (fst x) == snd x) t
-testInterpret = test interpret interpretTests
+testAnswers f t = map (\x -> (f (fst x), snd x)) t
+testInterpret = testAnswers interpret interpretTests
+answers = unlines $ fmap show testInterpret
+results = unlines $ show <$> (\(x,y) -> x == y) <$> testInterpret
 
 interpretTests =
   [("", Left ""),
@@ -13,7 +17,8 @@ interpretTests =
    (")", Left "Missing opening bracket"),
    ("1)", Left "Missing opening bracket"),
    ("(", Left "Unexpected end of expression"),
-   ("(1 2 3)", Left "Int 1 is not a function"),
+                  --"Error: Wrong arguments given to apply"
+   ("(1 2 3)", Left "Wrong arguments given to apply"),
    ("(quote 1)", Right (Int 1)),
    ("(quote 2)", Right (Int 2)),
    ("(quote (1))", Right (Int 1 :. Nil)),
